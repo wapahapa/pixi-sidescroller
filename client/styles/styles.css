@@ -1,0 +1,10 @@
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#app {
+    border: 1px dotted blue;
+    width: 800px;
+    height: 600px;
+}
