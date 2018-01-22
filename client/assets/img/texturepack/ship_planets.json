@@ -1,0 +1,55 @@
+{"frames": {
+
+"blue_ship.png":
+{
+	"frame": {"x":1,"y":560,"w":148,"h":49},
+	"rotated": false,
+	"trimmed": false,
+	"spriteSourceSize": {"x":0,"y":0,"w":148,"h":49},
+	"sourceSize": {"w":148,"h":49},
+	"pivot": {"x":0.5,"y":0.5}
+},
+"green_enemy_ship.png":
+{
+	"frame": {"x":151,"y":578,"w":48,"h":15},
+	"rotated": false,
+	"trimmed": false,
+	"spriteSourceSize": {"x":0,"y":0,"w":48,"h":15},
+	"sourceSize": {"w":48,"h":15},
+	"pivot": {"x":0.5,"y":0.5}
+},
+"planet_black.png":
+{
+	"frame": {"x":1,"y":1,"w":334,"h":332},
+	"rotated": false,
+	"trimmed": false,
+	"spriteSourceSize": {"x":0,"y":0,"w":334,"h":332},
+	"sourceSize": {"w":334,"h":332},
+	"pivot": {"x":0.5,"y":0.5}
+},
+"planet_green.png":
+{
+	"frame": {"x":1,"y":335,"w":223,"h":223},
+	"rotated": false,
+	"trimmed": false,
+	"spriteSourceSize": {"x":0,"y":0,"w":223,"h":223},
+	"sourceSize": {"w":223,"h":223},
+	"pivot": {"x":0.5,"y":0.5}
+},
+"rocket.png":
+{
+	"frame": {"x":151,"y":560,"w":34,"h":16},
+	"rotated": false,
+	"trimmed": false,
+	"spriteSourceSize": {"x":0,"y":0,"w":34,"h":16},
+	"sourceSize": {"w":34,"h":16},
+	"pivot": {"x":0.5,"y":0.5}
+}},
+"meta": {
+	"version": "1.0",
+	"image": "ship_planets.png",
+	"format": "RGBA8888",
+	"size": {"w":336,"h":610},
+	"scale": "1"
+}
+}
