@@ -31,41 +31,9 @@ const getRandomIntInclusive = (min, max) => {
     max = Math.floor(max);
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-// keyboard function takes ASCII keycode
-function keyboard(keyCode) {
-    let key = {};
-    key.code = keyCode;
-    key.isDown = false;
-    key.isUp = true;
-    key.press = undefined;
-    key.release = undefined;
-
-    key.downHandler = event => {
-      if (event.keyCode === key.code) {
-        if (key.isUp && key.press) key.press();
-        key.isDown = true;
-        key.isUp = false;
-      }
-      event.preventDefault();
-    };
-  
-    key.upHandler = event => {
-      if (event.keyCode === key.code) {
-        if (key.isDown && key.release) key.release();
-        key.isDown = false;
-        key.isUp = true;
-      }
-      event.preventDefault();
-    };
-  
-    window.addEventListener(
-      "keydown", key.downHandler.bind(key), false
-    );
-    window.addEventListener(
-      "keyup", key.upHandler.bind(key), false
-    );
-    return key;
-  }
+const getRandomNum = (min, max) => {
+    return Math.random() * (max - min) + min;
+}
 
 // fades container in or out then fires callback on end
 // function(PIXI.Container, callback on Fade end, true=fadeIn false=fadeOut, 0 < alphaModifier < 1)
@@ -106,6 +74,13 @@ PIXI.loader
 let splashContainer = new PIXI.Container();
 let splashScreen;
 
+// global gamestate Object
+let gameState = {
+    // the function to loop
+    loop: undefined,
+    // store pressed keys globally and react to them within objects
+    keys: {}
+};
 
 let gameContainer = new PIXI.Container();
 
@@ -117,77 +92,161 @@ let bgClose;
 
 let gamePlayContainer = new PIXI.Container();
 let playerObj;
-let playerClone;
-let playerShip;
 let enemyShip;
+let enemyArr = [];
+let rocketArr = [];
 
-let keyUp = keyboard(87);
-let keyLeft = keyboard(65);
-let keyDown = keyboard(83);
-let keyRight = keyboard(68);
 
+
+window.addEventListener("keydown", (e) => {
+    gameState.keys[e.code] = true;
+    //console.log(e.code);
+});
+window.addEventListener("keyup", (e) => {
+    gameState.keys[e.code] = false;
+})
+
+const containSprite = (sprite) => {
+    if (sprite.x < 0) {
+        sprite.x = 0;
+    }
+    if (sprite.x > app.renderer.width - sprite.width) {
+        sprite.x = app.renderer.width - sprite.width;
+    }
+    if (sprite.y < 0) {
+        sprite.y = 0;
+    }
+    if (sprite.y > app.renderer.height - sprite.height) {
+        sprite.y = app.renderer.height - sprite.height;
+    }
+}
+
+// timer object based on app's elapsed time
+// funtion(function to fire on timer end, time in ms, true = repeat timer / false = fire once)
+let GameTimer = function(callback, interval, repeat) {
+    
+    this.timer = interval;
+    this.currTime = this.timer;
+    this.callback = callback;
+    this.tick = app.ticker.elapsedMS;
+    this.repeat = repeat;
+    this.finished = false;
+
+    this.update = () => {
+        if (!this.finished){
+            if (this.currTime <= 0) {
+                this.callback();
+                this.repeat ? this.currTime = this.timer : this.finished = true;
+            }
+            else {
+            this.currTime -= this.tick;
+            }
+        }
+    }
+}
+let Rocket = function(startX, startY) {
+    this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures["rocket.png"]);
+    this.sprite.x = startX;
+    this.sprite.y = startY;
+
+    this.vx = 8;
+
+    this.update = function() {
+        this.sprite.x += this.vx;
+    }
+
+
+}
+// Player's ship
 let Player = function(spriteId) {
     this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures[spriteId]);
 
     this.sprite.x = 15;
-    this.vx = 0;
-
     this.sprite.y = app.renderer.height / 2 - this.sprite.height;
+
+    this.vx = 0;
     this.vy = 0;
 
-    this.fireRate = 250; //ms
+    this.shootRocket = function() {
+        let rocket = new Rocket(this.sprite.x + this.sprite.width / 2, this.sprite.y + this.sprite.height / 2);
+        rocketArr.push(rocket);
+        gamePlayContainer.addChild(rocket.sprite);
+    }
+    this.reloaded = true;
+    this.reloadTimer = new GameTimer(() => {
+        this.reloaded = true;
+    }, 1000, true)
 
-    keyUp.press = () => {
-        this.vy = -5;
-    }
-    keyUp.release = () => {
-        if (!keyDown.isDown) {
-            this.vy = 0;
-        }
-    }
+    this.update = function(state) {
 
-    keyLeft.press = () => {
-        this.vx = -5;
-    }
-    keyLeft.release = () => {
-        if(!keyRight.isDown) {
-            this.vx = 0;
-        }
-    }
+        this.keys = state.keys
+        
+        this.keys.KeyW ? this.vy = -5 : !this.keys.KeyS ? this.vy = 0 : null;
+        this.keys.KeyA ? this.vx = -5 : !this.keys.KeyD ? this.vx = 0 : null;
+        this.keys.KeyS ? this.vy = 5 : !this.keys.KeyW ? this.vy = 0 : null;
+        this.keys.KeyD ? this.vx = 5 : !this.keys.KeyA ? this.vx = 0 : null;
 
-    keyDown.press = () => {
-        this.vy = 5;
-    }
-    keyDown.release = () => {
-        if (!keyUp.isDown) {
-            this.vy = 0;
+        if (this.reloaded == false) {
+            this.reloadTimer.update();
         }
-    }
+        else if (this.keys.Space && this.reloaded) {
+            this.reloaded = false;
+            this.shootRocket();
+            console.log("rocket shot");
+        }
 
-    keyRight.press = () => {
-        this.vx = 5;
+        this.sprite.x += this.vx;
+        this.sprite.y += this.vy;
+        containSprite(this.sprite);
     }
-    keyRight.release = () => {
-        if (!keyLeft.isDown) {
-            this.vx = 0;
-        }
-    }
+}
+// Enemy ship
+let Enemy = function(spriteId) {
+    this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures[spriteId]);
+
+    
+    this.sprite.x = app.renderer.width + 20;
+    this.sprite.y = getRandomIntInclusive(0, app.renderer.width - this.sprite.height);
+    this.sprite.tint = 0xFF0000;
+
+    // make sprite brighter because of dark background
+    this.colorMatrix = new PIXI.filters.ColorMatrixFilter();
+    this.sprite.filters = [this.colorMatrix];
+    this.colorMatrix.brightness(5, true);
+
+    
+    // set initial x velocity for intro 
+    this.vx = -2;
+    this.vy = 0;
+    this.introDone = false;
+
+    this.movementTimer = new GameTimer(() => {
+        this.vx = getRandomNum(-3, 3);
+        this.vy = getRandomNum(-3, 3);
+    }, 2000, true)
 
     this.update = function() {
 
         this.sprite.x += this.vx;
         this.sprite.y += this.vy;
+        if (this.sprite.x <= app.renderer.width - this.sprite.width) {this.introDone = true};
+
+        if (this.introDone) {
+            this.movementTimer.update()
+            containSprite(this.sprite);
+        }
+        
     }
+
 }
 
-let state = null;
 
 function setup() {
 
     splashScreen = new PIXI.Sprite(PIXI.loader.resources.splashRocket.texture);
     splashContainer.alpha = 1;
     splashContainer.addChild(splashScreen);
-    //containerFade(splashContainer, ()=>{console.log("hello")}, false, 0.015);
+    //containerFade(splashContainer, ()=>{}, false, 0.015);
 
     //alias for easier gametexture loader resource access
     let gameTextureId = PIXI.loader.resources.gameTextures.textures;    
@@ -208,20 +267,15 @@ function setup() {
         
         let moonBgTexture = PIXI.loader.resources.moonBg.texture;
         bgClose = new PIXI.extras.TilingSprite(moonBgTexture, moonBgTexture.baseTexture.width, moonBgTexture.baseTexture.height);
-        bgClose.y = app.renderer.height - bgClose.height;
-
-        //ships
-        playerShip = new PIXI.Sprite(gameTextureId["blue_ship.png"]);
-        enemyShip = new PIXI.Sprite(gameTextureId["green_enemy_ship.png"]);
+        bgClose.y = app.renderer.height - bgClose.height;        
         
-        playerClone = new Player("blue_ship.png");
         playerObj = new Player("blue_ship.png");
-        
-        playerClone.sprite.y = 100;
-        gamePlayContainer.addChild(playerObj.sprite, playerClone.sprite);
+        //let enemyShip = new Enemy("green_enemy_ship.png");
+
+
+        gamePlayContainer.addChild(playerObj.sprite,);
 
         gameBackgroundContainer.addChild(bgFar, bgPlanetBlack, bgPlanetGreen, bgClose);
-
         
     }    
     gameSetup();
@@ -232,20 +286,30 @@ function setup() {
     app.stage.addChild(gameContainer);
 
     
-    state = gamePlayLoop;
+    gameState.loop = gamePlayLoop;
 
 
-    app.ticker.add(state);
+    app.ticker.add(delta => gameState.loop(delta));
 }
 
 function gameLoop() {
-    state();
+    gameState();
 }
 
-function gamePlayLoop() {
-    
-    playerObj.update();
-    playerClone.update();
+
+let spawnEnemy = new GameTimer(()=> {
+    let enemy = new Enemy("green_enemy_ship.png");
+    enemyArr.push(enemy);
+    gamePlayContainer.addChild(enemy.sprite);
+
+}, 2000, true)
+
+function gamePlayLoop(delta) {
+
+    playerObj.update(gameState);
+    spawnEnemy.update();
+    enemyArr.forEach(el => el.update())
+    rocketArr.forEach(el => el.update())
 
     let travelSpeed = 10;
     let backgroundScroll = function() {           
@@ -270,6 +334,4 @@ function gamePlayLoop() {
 
 
 }
-
-
 
