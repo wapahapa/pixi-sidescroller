@@ -24,16 +24,7 @@ let gameTexturesURI = `data:application/json;base64,${btoa(JSON.stringify(gameTe
 
 
 
-//*** HELPER FUNCTIONS ***
-//random INT generator helper
-const getRandomIntInclusive = (min, max) => {
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-const getRandomNum = (min, max) => {
-    return Math.random() * (max - min) + min;
-}
+
 
 // fades container in or out then fires callback on end
 // function(PIXI.Container, callback on Fade end, true=fadeIn false=fadeOut, 0 < alphaModifier < 1)
@@ -76,28 +67,19 @@ let splashScreen;
 
 // global gamestate Object
 let gameState = {
-    // the function to loop
+    // the current gameloop
     loop: undefined,
     // store pressed keys globally and react to them within objects
-    keys: {}
+    keys: {},
+    // current game instance
+    gameInstance: null,
+    // current gameObjects
+    gameObjects: {
+        rockets: [],
+        enemies: []
+    }
 };
-
-let gameContainer = new PIXI.Container();
-
-let gameBackgroundContainer = new PIXI.Container();
-let bgPlanetBlack;
-let bgPlanetGreen;
-let bgFar;
-let bgClose;
-
-let gamePlayContainer = new PIXI.Container();
-let playerObj;
-let enemyShip;
-let enemyArr = [];
-let rocketArr = [];
-
-
-
+// global eventlisteners for keyboard keypresses
 window.addEventListener("keydown", (e) => {
     gameState.keys[e.code] = true;
     //console.log(e.code);
@@ -106,6 +88,36 @@ window.addEventListener("keyup", (e) => {
     gameState.keys[e.code] = false;
 })
 
+
+let bgPlanetBlack;
+let bgPlanetGreen;
+let bgFar;
+let bgClose;
+
+
+let playerObj;
+let enemyShip;
+let enemyArr = [];
+let rocketArr = [];
+
+let gameContainer = new PIXI.Container();
+let gameBackgroundContainer = new PIXI.Container();
+let gamePlayContainer = new PIXI.Container();
+gameContainer.addChild(gameBackgroundContainer, gamePlayContainer);
+app.stage.addChild(gameContainer);
+
+//*** HELPER FUNCTIONS ***
+//random INT generator helper
+const getRandomIntInclusive = (min, max) => {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+const getRandomNum = (min, max) => {
+    return Math.random() * (max - min) + min;
+}
+
+// contains sprite within apps viewable canvas
 const containSprite = (sprite) => {
     if (sprite.x < 0) {
         sprite.x = 0;
@@ -120,6 +132,21 @@ const containSprite = (sprite) => {
         sprite.y = app.renderer.height - sprite.height;
     }
 }
+
+// AABB rect collision detection preferably takes PIXI.Sprites as params
+const detectRectCollision = (rectA, rectB) => {
+    if (rectA.x < rectB.x + rectB.width &&
+        rectB.x < rectA.x + rectA.width &&
+        rectA.y < rectB.y + rectB.height &&
+        rectB.y < rectA.y + rectA.height
+    ) {
+        return true;
+    }
+    else {
+        return false;
+    }
+
+};
 
 // timer object based on app's elapsed time
 // funtion(function to fire on timer end, time in ms, true = repeat timer / false = fire once)
@@ -169,7 +196,7 @@ let Player = function(spriteId) {
 
     this.shootRocket = function() {
         let rocket = new Rocket(this.sprite.x + this.sprite.width / 2, this.sprite.y + this.sprite.height / 2);
-        rocketArr.push(rocket);
+        gameState.gameObjects.rockets.push(rocket);
         gamePlayContainer.addChild(rocket.sprite);
     }
     this.reloaded = true;
@@ -177,10 +204,11 @@ let Player = function(spriteId) {
         this.reloaded = true;
     }, 1000, true)
 
-    this.update = function(state) {
+    this.update = function() {
 
-        this.keys = state.keys
+        this.keys = gameState.keys
         
+        //handle directional controls WASD
         this.keys.KeyW ? this.vy = -5 : !this.keys.KeyS ? this.vy = 0 : null;
         this.keys.KeyA ? this.vx = -5 : !this.keys.KeyD ? this.vx = 0 : null;
         this.keys.KeyS ? this.vy = 5 : !this.keys.KeyW ? this.vy = 0 : null;
@@ -204,8 +232,8 @@ let Player = function(spriteId) {
 let Enemy = function(spriteId) {
     this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures[spriteId]);
 
-    
-    this.sprite.x = app.renderer.width + 20;
+    // spawn on right end of screen with random y value
+    this.sprite.x = app.renderer.width + 1;
     this.sprite.y = getRandomIntInclusive(0, app.renderer.width - this.sprite.height);
     this.sprite.tint = 0xFF0000;
 
@@ -214,9 +242,8 @@ let Enemy = function(spriteId) {
     this.sprite.filters = [this.colorMatrix];
     this.colorMatrix.brightness(5, true);
 
-    
     // set initial x velocity for intro 
-    this.vx = -2;
+    this.vx = -1;
     this.vy = 0;
     this.introDone = false;
 
@@ -239,7 +266,95 @@ let Enemy = function(spriteId) {
     }
 
 }
+// 4 layer parallax scroll background
+// I know the task specified a 2 layer only scrolling background, but I felt adding some planets looks better
+let GameBackground = function(bgEndId, bgFarId, bgCloseId, bgFront, scrollSpeed) {
 
+    // simple sprites
+    this.bgFarSprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures[bgFarId]);
+    this.bgFarSprite.x = app.renderer.width + 20;
+    this.bgFarSprite.y = getRandomIntInclusive(0, app.renderer.height / 2 - 200);
+    this.bgFarSprite.tint = Math.random() * 0xFFFF;
+
+    this.bgCloseSprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures[bgCloseId]);
+    this.bgCloseSprite.x = app.renderer.width + 200;
+    this.bgCloseSprite.y = getRandomIntInclusive(app.renderer.height / 2 - 100, app.renderer.height - this.bgCloseSprite.height);
+    this.bgCloseSprite.tint = Math.random() * 0xFFFF;
+
+    // tilingsprites 
+    // theese alone fulfill the specification of 2 layer parallax background
+    let bgEndTexture = PIXI.loader.resources.starsBg.texture;
+    this.bgEndTileSprite = new PIXI.extras.TilingSprite(bgEndTexture, bgEndTexture.baseTexture.width, bgEndTexture.baseTexture.height);
+    let bgFrontTexture = PIXI.loader.resources.moonBg.texture;
+    this.bgFrontTileSprite = new PIXI.extras.TilingSprite(bgFrontTexture, bgFrontTexture.baseTexture.width, bgFrontTexture.baseTexture.height);
+    this.bgFrontTileSprite.y = app.renderer.height - this.bgFrontTileSprite.height;
+    
+    this.scrollSpeed = scrollSpeed;
+
+    this.update = function() {
+        if (this.bgFarSprite.x + this.bgFarSprite.width <= 0) {
+            this.bgFarSprite.x = app.renderer.width + 20;
+            this.bgFarSprite.y = getRandomIntInclusive(0, app.renderer.height / 2 - 200);
+            this.bgFarSprite.tint = Math.random() * 0xFFFF;
+        }
+        if (this.bgCloseSprite.x + this.bgCloseSprite.width <= 0) {
+            this.bgCloseSprite.x = app.renderer.width + 20;
+            this.bgCloseSprite.y = getRandomIntInclusive(app.renderer.height / 2 + 50, app.renderer.height - this.bgCloseSprite.height - 50);
+            this.bgCloseSprite.tint = Math.random() * 0xFFFF;
+        }
+        this.bgFarSprite.x += -(this.scrollSpeed / 25);
+        this.bgCloseSprite.x += -(this.scrollSpeed / 15)
+
+        this.bgEndTileSprite.tilePosition.x += -(this.scrollSpeed / 100);
+        this.bgFrontTileSprite.tilePosition.x += -(this.scrollSpeed / 10);
+    }
+
+
+}
+let NewGameSetup = function() {
+    this.background = new GameBackground("starsBg", "planet_black.png", "planet_green.png", "moonBg", 10);
+    
+    this.player = new Player("blue_ship.png");
+
+    gameBackgroundContainer.addChild(this.background.bgEndTileSprite, this.background.bgFarSprite, this.background.bgCloseSprite, this.background.bgFrontTileSprite);
+    gamePlayContainer.addChild(this.player.sprite);
+
+    this.spawnEnemy = new GameTimer(()=> {
+        let enemy = new Enemy("green_enemy_ship.png");
+        gameState.gameObjects.enemies.push(enemy);
+        gamePlayContainer.addChild(enemy.sprite);    
+    }, 2000, true)
+
+    this.update = function() {
+        
+        this.background.update();
+        this.player.update();
+        this.spawnEnemy.update();
+        gameState.gameObjects.enemies.forEach(sprite => sprite.update());
+        gameState.gameObjects.rockets.forEach(sprite => sprite.update());
+
+        // playerCollision
+        gameState.gameObjects.enemies.forEach(enemy => {
+            if (detectRectCollision(this.player.sprite, enemy.sprite)) {
+                console.log("collided");
+            }
+        })
+        // rocketCollision 
+        gameState.gameObjects.enemies.forEach((enemy, i) => {
+            gameState.gameObjects.rockets.forEach((rocket, j) => {
+                if (detectRectCollision(enemy.sprite, rocket.sprite)){
+                    gameState.gameObjects.enemies.splice(i, 1);
+                    gameState.gameObjects.rockets.splice(j, 1);
+
+                    gamePlayContainer.removeChild(enemy.sprite);
+                    gamePlayContainer.removeChild(rocket.sprite);
+                }
+            })
+        })
+    }
+
+
+}
 
 function setup() {
 
@@ -250,46 +365,12 @@ function setup() {
 
     //alias for easier gametexture loader resource access
     let gameTextureId = PIXI.loader.resources.gameTextures.textures;    
-    
-    
-    let gameSetup = () => {
-        //background     
-        bgPlanetBlack = new PIXI.Sprite(gameTextureId["planet_black.png"]);
-        bgPlanetBlack.x = app.renderer.width;
-
-        bgPlanetGreen = new PIXI.Sprite(gameTextureId["planet_green.png"]);
-        bgPlanetGreen.x = app.renderer.width + 200;
-        bgPlanetGreen.y = getRandomIntInclusive(app.renderer.height / 2 - 100, app.renderer.height - bgPlanetGreen.height);
-        bgPlanetGreen.tint = Math.random() * 0xFFFF;
-        
-        let starsBgTexture = PIXI.loader.resources.starsBg.texture;
-        bgFar = new PIXI.extras.TilingSprite(starsBgTexture, starsBgTexture.baseTexture.width, starsBgTexture.baseTexture.height);
-        
-        let moonBgTexture = PIXI.loader.resources.moonBg.texture;
-        bgClose = new PIXI.extras.TilingSprite(moonBgTexture, moonBgTexture.baseTexture.width, moonBgTexture.baseTexture.height);
-        bgClose.y = app.renderer.height - bgClose.height;        
-        
-        playerObj = new Player("blue_ship.png");
-        //let enemyShip = new Enemy("green_enemy_ship.png");
 
 
-        gamePlayContainer.addChild(playerObj.sprite,);
-
-        gameBackgroundContainer.addChild(bgFar, bgPlanetBlack, bgPlanetGreen, bgClose);
-        
-    }    
-    gameSetup();
-
-    
-    gameContainer.addChild(gameBackgroundContainer, gamePlayContainer);
-
-    app.stage.addChild(gameContainer);
-
-    
+    gameState.gameObj = new NewGameSetup();
     gameState.loop = gamePlayLoop;
-
-
     app.ticker.add(delta => gameState.loop(delta));
+    console.log(gameState);
 }
 
 function gameLoop() {
@@ -305,33 +386,7 @@ let spawnEnemy = new GameTimer(()=> {
 }, 2000, true)
 
 function gamePlayLoop(delta) {
-
-    playerObj.update(gameState);
-    spawnEnemy.update();
-    enemyArr.forEach(el => el.update())
-    rocketArr.forEach(el => el.update())
-
-    let travelSpeed = 10;
-    let backgroundScroll = function() {           
-
-        if (bgPlanetBlack.x + bgPlanetBlack.width <= 0) {
-            bgPlanetBlack.x = app.renderer.width + 20;
-            bgPlanetBlack.y = getRandomIntInclusive(0, app.renderer.height / 2 - 200);
-            bgPlanetBlack.tint = Math.random() * 0xFFFF;
-        }
-        if (bgPlanetGreen.x + bgPlanetGreen.width <= 0) {
-            bgPlanetGreen.x = app.renderer.width + 20;
-            bgPlanetGreen.y = getRandomIntInclusive(app.renderer.height / 2 + 50, app.renderer.height - bgPlanetGreen.height - 50);
-            bgPlanetGreen.tint = Math.random() * 0xFFFF;
-        }
-        bgPlanetBlack.x += -(travelSpeed / 25);
-        bgPlanetGreen.x += -(travelSpeed / 15)
-
-        bgFar.tilePosition.x += -(travelSpeed / 100);
-        bgClose.tilePosition.x += -(travelSpeed / 10);
-    }()
-
-
+    gameState.gameObj.update();
 
 }
 
