@@ -1,6 +1,8 @@
 node_modules
 .vscode
 photoshop
+photoshop/
+texturepacker/
 texturepacker
 playnGo_task.zip
 .gitignore
