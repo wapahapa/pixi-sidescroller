@@ -577,7 +577,6 @@ let NewGame = function() {
                     gamePlayContainer.removeChild(rocket.sprite);
 
                 }
-                // remove rocket if goes offscreen
                 if (rocket.sprite.x > app.renderer.width) {
                     gameState.gameObjects.rockets.splice(j, 1);
 
