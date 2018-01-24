@@ -1,7 +1,5 @@
 import styles from './styles/styles.css';
 
-
-
 import * as PIXI from 'pixi.js';
 
 //Using webpack's url-loader to import our images and convert them to dataURI which PIXI loader can use.
@@ -27,13 +25,6 @@ import gameTexturesJSON from './assets/img/texturepack/ship_planets.json';
 
 gameTexturesJSON.meta.image = gameTexturesPNG; //set JSON's image property to the source spritesheet png's dataURI
 let gameTexturesURI = `data:application/json;base64,${btoa(JSON.stringify(gameTexturesJSON))}` //convert our JSON to dataURI
-
-
-
-
-
-
-
 
 let app = new PIXI.Application({
         width: 800,
@@ -67,7 +58,8 @@ let gameState = {
     // current gameObjects
     gameObjects: {
         rockets: [],
-        enemies: []
+        enemies: [],
+        explosions: []
     }
 };
 // global eventlisteners for keyboard keypresses
@@ -140,6 +132,7 @@ const detectRectCollision = (rectA, rectB) => {
 // fades container in or out then fires callback on end
 // function(PIXI.Container, callback on Fade end,  0 < alphaModifier < 1)
 const containerFade = function(container, callback, fadeIn, alphaModifier)  {
+    
     let alphaMod;
     fadeIn === true ? alphaMod = alphaModifier : alphaMod = -alphaModifier;
 
@@ -148,7 +141,8 @@ const containerFade = function(container, callback, fadeIn, alphaModifier)  {
         if (container.alpha < 0 || container.alpha > 1) {
             callback();
             app.ticker.remove(fadeAnim);
-            //cancelAnimationFrame(frameCall);                               
+            //cancelAnimationFrame(frameCall);
+            container.alpha = Math.round(container.alpha);                           
         }
         else {
             container.alpha += alphaMod;
@@ -183,16 +177,18 @@ let GameTimer = function(callback, interval, repeat) {
 }
 
 // draw a customizable Button with the help of PIXI
-let GameMenuButton = function(x, y, width, height, text, onMouseUp) {
+let GameMenuButton = function(x, y, width, height, text, onPointerUp) {
     this.btn = new PIXI.Container();
+
     this.btn.x = x;
     this.btn.y = y;
 
     this.btn.interactive = true;
 
     this.btn.buttonMode = true;
-    this.btn.on("pointerdown", () => {console.log("down")});
-    this.btn.on("pointerup", onMouseUp);
+    
+    this.btn.on("pointerup", onPointerUp);
+
 
     this.btnWidth = width;
     this.btnHeight = height;
@@ -204,6 +200,24 @@ let GameMenuButton = function(x, y, width, height, text, onMouseUp) {
     this.buttonRect.endFill();
     this.buttonRect.x = x;
     this.buttonRect.y = y;
+
+    // some feedback for the user when hovering/pressing the buttons
+    this.btn.on("pointerover", () => {
+        this.buttonRect.beginFill(0x0886db);
+        this.buttonRect.drawRoundedRect(0, 0, this.btnWidth, this.btnHeight, this.btnHeight / 2.5);
+        this.buttonRect.endFill();
+    });
+    this.btn.on("pointerout", () => {
+        this.buttonRect.beginFill(0x04558c);
+        this.buttonRect.drawRoundedRect(0, 0, this.btnWidth, this.btnHeight, this.btnHeight / 2.5);
+        this.buttonRect.endFill();
+    })
+    this.btn.on("pointerdown", () => {
+        this.buttonRect.beginFill(0x043251);
+        this.buttonRect.drawRoundedRect(0, 0, this.btnWidth, this.btnHeight, this.btnHeight / 2.5);
+        this.buttonRect.endFill();
+    })
+
     
 
     this.buttonText = new PIXI.Text(text, {fontFamily: "Arial", fill: "white", fontSize: this.btnHeight / 2, fontWeight: "bold", stroke: "black", strokeThickness: 2})
@@ -212,7 +226,11 @@ let GameMenuButton = function(x, y, width, height, text, onMouseUp) {
     this.buttonText.anchor.set(0.5, 0.5);
     this.buttonText.x = x + this.buttonRect.width / 2;
     this.buttonText.y = y + this.buttonRect.height / 2;    
+    
+    
+
 }
+// game's Menu scene 
 let GameMenu = function() {
     this.menuBg = new PIXI.Sprite(PIXI.loader.resources.menuBg.texture);
     this.menuFlare = new PIXI.Sprite(PIXI.loader.resources.menuFlare.texture);
@@ -274,7 +292,52 @@ let GameMenu = function() {
     }
 
 }
+// explosion object for when ships are destroyed, emits small circle PIXIgraphics in random directions
+let ParticleExplosion = function(x, y, minParticles, maxParticles) {
+    this.explosion = new PIXI.Container();
+    this.explosion.x = x;
+    this.explosion.y = y;
 
+    this.particleArr = [];
+
+    this.Particle = function() {
+        this.particle = new PIXI.Graphics();
+        this.particle.beginFill(0xFFFFFF)
+        this.particle.drawCircle(0 , 0, 2)
+        this.particle.endFill();
+        this.dead = false;
+
+        this.lifeTime = getRandomIntInclusive(500, 1500);
+        this.lifeTimer = new GameTimer(() => {
+            this.dead = true;
+        }, this.lifeTime, false);
+
+        this.direction = (getRandomIntInclusive(0, 360) * Math.PI) * 180;
+        this.angle = 0;
+
+        this.particleVelocity = getRandomNum(0, 2);
+        this.particle.x = 0;
+        this.particle.y = 0;
+
+        this.update = function() {
+            let radians = (this.direction * Math.PI) * 180;
+            this.particle.x += this.particleVelocity * Math.cos(radians);
+            this.particle.y += this.particleVelocity * Math.sin(radians);
+            this.lifeTimer.update();
+        }
+    }
+    this.particleNum = getRandomIntInclusive(minParticles, maxParticles);
+    for (let i = 0; i < this.particleNum; i++) {
+        let currParticle = new this.Particle;
+        this.particleArr.push(currParticle);
+        this.explosion.addChild(currParticle.particle);
+    }
+    gamePlayContainer.addChild(this.explosion);
+    this.update = () => {
+        this.particleArr.forEach((particle, i) => particle.dead ? this.explosion.removeChild(this.explosion.children[i]) : particle.update());
+        
+    }
+}
 // player's rockets
 let Rocket = function(startX, startY) {
     this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures["rocket.png"]);
@@ -317,13 +380,13 @@ let Player = function(spriteId) {
         this.keys.KeyS ? this.vy = 5 : !this.keys.KeyW ? this.vy = 0 : null;
         this.keys.KeyD ? this.vx = 5 : !this.keys.KeyA ? this.vx = 0 : null;
 
+        // handle SPACE for shooting rocket
         if (this.reloaded == false) {
             this.reloadTimer.update();
         }
         else if (this.keys.Space && this.reloaded) {
             this.reloaded = false;
             this.shootRocket();
-            console.log("rocket shot");
         }
 
         this.sprite.x += this.vx;
@@ -370,7 +433,7 @@ let Enemy = function(spriteId) {
 
 }
 // 4 layer parallax scroll background
-// I know the task specified a 2 layer only scrolling background, but I felt adding some planets looks better
+// The task specified a 2 layer only scrolling background, but I felt adding some planets looked better
 let GameBackground = function(bgEndId, bgFarId, bgCloseId, bgFront, scrollSpeed) {
 
     // simple sprites
@@ -428,15 +491,21 @@ let NewGame = function() {
         gamePlayContainer.addChild(enemy.sprite);    
     }, 2000, true)
 
-    
+    this.spawnExplosion = (x, y, minParticles, maxParticles) => {
+        let explosion = new ParticleExplosion(x, y, minParticles, maxParticles);
+
+        gameState.gameObjects.explosions.push(explosion);
+    }
+
+
     this.gameOver = false;
     // game over handler, waits for a set amount of time then cleans up the gamestate and game's containers
     // switches scene back to the menu
     this.gameOverTimer = new GameTimer(()=> {
         containerFade(gameContainer, () => {
-            
             gameState.gameObjects.rockets = [];
             gameState.gameObjects.enemies = [];
+            gameState.gameObjects.explosions = [];
 
             gameContainer.visible = false;
             menuContainer.visible = true;
@@ -447,22 +516,36 @@ let NewGame = function() {
             for (let i = gamePlayContainer.children.length; i >= 0; i--) {
                 gamePlayContainer.removeChild(gamePlayContainer.children[i])
             }
-            // cleanup background sprites, if this was skipped, whenever player starts a new game
-            // remnants of last game's background were visible for the duration of the fade animation.
+            // cleanup background sprites
             for (let j = gameBackgroundContainer.children.length; j >= 0; j--) {
                 gameBackgroundContainer.removeChild(gameBackgroundContainer.children[j])
             }
-            console.log(gamePlayContainer.children);
-            console.log(gameBackgroundContainer.children);
-
-            }, false, 0.005)
-    }, 3000, false)
-
+            },false, 0.015)
+    }, 2000, false)
+    this.gameOverOverlay = function() {
+        this.gameOverText = new PIXI.Text("GAME OVER", {
+            fill: ["#ad0f0f", "#d64040"],
+            fontSize: 60,
+            fontWeight: "bolder",
+            fontFamily: "Impact",
+            stroke: "black",
+            strokeThickness: 3,
+            dropShadow: true,
+            dropShadowAlpha: 0.8,
+            dropShadowBlur: 5,
+        })
+        this.gameOverText.anchor.set(0.5, 0.5);
+        this.gameOverText.x = app.renderer.width / 2;
+        this.gameOverText.y = app.renderer.height / 2;
+        gamePlayContainer.addChild(this.gameOverText);
+    }
     this.update = function() {
 
         // update scrolling background and every gameobject
         this.background.update();
         this.spawnEnemy.update();
+
+        gameState.gameObjects.explosions.forEach(explosion => explosion.update());
         gameState.gameObjects.enemies.forEach(sprite => sprite.update());
         gameState.gameObjects.rockets.forEach(sprite => sprite.update());
 
@@ -473,6 +556,9 @@ let NewGame = function() {
         gameState.gameObjects.enemies.forEach((enemy, i) => {
             if (detectRectCollision(this.player.sprite, enemy.sprite)) {
                 this.gameOver = true;
+                this.spawnExplosion(this.player.sprite.x + this.player.sprite.width / 2, this.player.sprite.y + this.player.sprite.height / 2, 100, 150)
+                this.spawnExplosion(enemy.sprite.x + enemy.sprite.width / 2, enemy.sprite.y + enemy.sprite.height / 2, 10, 35);
+                this.gameOverOverlay();
                 gamePlayContainer.removeChild(this.player.sprite);
                 gameState.gameObjects.enemies.splice(i, 1);
                 gamePlayContainer.removeChild(enemy.sprite);                
@@ -482,22 +568,25 @@ let NewGame = function() {
         gameState.gameObjects.enemies.forEach((enemy, i) => {
             gameState.gameObjects.rockets.forEach((rocket, j) => {
                 if (detectRectCollision(enemy.sprite, rocket.sprite)){
+
                     gameState.gameObjects.enemies.splice(i, 1);
                     gameState.gameObjects.rockets.splice(j, 1);
 
+                    this.spawnExplosion(enemy.sprite.x + enemy.sprite.width / 2, enemy.sprite.y + enemy.sprite.height / 2, 10, 35);
                     gamePlayContainer.removeChild(enemy.sprite);
                     gamePlayContainer.removeChild(rocket.sprite);
+
                 }
+                // remove rocket if goes offscreen
                 if (rocket.sprite.x > app.renderer.width) {
-                    console.log("rocket removed");
                     gameState.gameObjects.rockets.splice(j, 1);
 
                     gamePlayContainer.removeChild(rocket.sprite);
                 }
             })
         })
+        // tick gameending timer
         if (this.gameOver) {
-            console.log("game endin")
             this.gameOverTimer.update();
         }
     }
