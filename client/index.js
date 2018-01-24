@@ -603,8 +603,8 @@ function setup() {
             gameState.loop = menuLoop;
 
             app.ticker.add(gameLoop);
-        }, false, 0.5)
-    }, 1)
+        }, false, 0.015)
+    }, 2000)
 }
 
 // main gameloop
