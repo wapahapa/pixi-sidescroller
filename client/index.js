@@ -10,6 +10,11 @@ import * as PIXI from 'pixi.js';
 //splashscreen img imports
 import splashURI from './assets/img/rocket_space_splash.png';
 
+//menu img imports 
+import bg_menuURI from './assets/img/menu_bg.jpg';
+import menuLogoURI from './assets/img/game_logo.png';
+import menuAnimPlanetURI from './assets/img/menu_anim_planet.png';
+
 //game container img imports
 import bg_farURI from './assets/img/back_bg.jpg';
 import bg_closeURI from './assets/img/front_bg.png';
@@ -57,6 +62,9 @@ document.getElementById("app").appendChild(app.view);
 
 PIXI.loader
     .add("splashRocket", splashURI)
+    .add("menuBg", bg_menuURI)
+    .add("menuPlanet", menuAnimPlanetURI)
+    .add("menuLogo", menuLogoURI)
     .add("gameTextures", gameTexturesURI)
     .add("starsBg", bg_farURI)
     .add("moonBg", bg_closeURI)
@@ -89,22 +97,19 @@ window.addEventListener("keyup", (e) => {
 })
 
 
-let bgPlanetBlack;
-let bgPlanetGreen;
-let bgFar;
-let bgClose;
-
-
-let playerObj;
-let enemyShip;
-let enemyArr = [];
-let rocketArr = [];
+// PIXI app stage's hierarchy
+let menuContainer = new PIXI.Container();
+app.stage.addChild(menuContainer);
+let menuBackgroundContainer = new PIXI.Container();
+let menuUIContainer = new PIXI.Container();
+menuContainer.addChild(menuBackgroundContainer, menuUIContainer,);
 
 let gameContainer = new PIXI.Container();
+app.stage.addChild(gameContainer);
 let gameBackgroundContainer = new PIXI.Container();
 let gamePlayContainer = new PIXI.Container();
 gameContainer.addChild(gameBackgroundContainer, gamePlayContainer);
-app.stage.addChild(gameContainer);
+
 
 //*** HELPER FUNCTIONS ***
 //random INT generator helper
@@ -148,7 +153,8 @@ const detectRectCollision = (rectA, rectB) => {
 
 };
 
-// timer object based on app's elapsed time
+
+// timer based on app's ticker elapsed time
 // funtion(function to fire on timer end, time in ms, true = repeat timer / false = fire once)
 let GameTimer = function(callback, interval, repeat) {
     
@@ -171,6 +177,75 @@ let GameTimer = function(callback, interval, repeat) {
         }
     }
 }
+
+
+let GameMenuButton = function(x, y, width, height, text, onMouseUp) {
+    this.btn = new PIXI.Container();
+    this.btn.x = x;
+    this.btn.y = y;
+
+    this.btn.interactive = true;
+
+    this.btn.buttonMode = true;
+    this.btn.on("pointerdown", () => {console.log("down")});
+    this.btn.on("pointerup", onMouseUp);
+
+    this.btnWidth = width;
+    this.btnHeight = height;
+
+    this.buttonRect = new PIXI.Graphics();
+    this.buttonRect.lineStyle(3, 0xb27c18, 0.8);
+    this.buttonRect.beginFill(0x04558c);
+    this.buttonRect.drawRoundedRect(0, 0, this.btnWidth, this.btnHeight, this.btnHeight / 2.5);
+    this.buttonRect.endFill();
+    this.buttonRect.x = x;
+    this.buttonRect.y = y;
+    
+
+    this.buttonText = new PIXI.Text(text, {fontFamily: "Arial", fill: "white", fontSize: this.btnHeight / 2, fontWeight: "bold", stroke: "black", strokeThickness: 2})
+    this.btn.addChild(this.buttonRect, this.buttonText);
+
+    this.buttonText.anchor.set(0.5, 0.5);
+    this.buttonText.x = x + this.buttonRect.width / 2;
+    this.buttonText.y = y + this.buttonRect.height / 2;    
+}
+let GameMenu = function() {
+    this.menuBg = new PIXI.Sprite(PIXI.loader.resources.menuBg.texture);
+    this.menuPlanet = new PIXI.Sprite(PIXI.loader.resources.menuPlanet.texture);
+    this.menuPlanet.anchor.set(0.5, 0.5);
+
+    this.planetScale = 0.4;
+    this.planetSizeModifier = 0.0005;    
+    
+    menuBackgroundContainer.addChild(this.menuBg, this.menuPlanet);
+
+    this.menuBtnOffset = 25;
+    this.menuLogo = new PIXI.Sprite(PIXI.loader.resources.menuLogo.texture);
+    this.menuLogo.width = 150;
+    this.menuLogo.height = 100;
+    this.game1 = new GameMenuButton(10, this.menuBtnOffset * 1, 150, 40, "GAME1", ()=> {console.log("cliked me")});
+    this.game2 = new GameMenuButton(10, this.menuBtnOffset * 2, 150, 40, "GAME2", () => console.log("hello"));
+    this.game3 = new GameMenuButton(10, this.menuBtnOffset * 3, 150, 40, "GAME3", function() { console.log("hello")});
+    this.exit = new GameMenuButton(10, this.menuBtnOffset * 4, 150, 40, "EXIT", () => {window.location.replace("http://www.google.hu")});
+
+    menuUIContainer.addChild(this.menuLogo, this.game1.btn, this.game2.btn, this.game3.btn, this.exit.btn);
+    menuUIContainer.x = 25;
+    menuUIContainer.y = 80;
+
+
+    // very basic planet pulsing animation to fulfil menu bacground animation specification
+    this.planetAnimTimer = new GameTimer(() => {
+        this.planetSizeModifier = -this.planetSizeModifier;
+    }, 5000, true)
+    this.update = function() {
+        this.planetScale += this.planetSizeModifier;
+        this.menuPlanet.setTransform(550, 300, this.planetScale, this.planetScale);
+        this.planetAnimTimer.update();
+    }
+
+}
+
+// player's rockets
 let Rocket = function(startX, startY) {
     this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures["rocket.png"]);
     this.sprite.x = startX;
@@ -181,8 +256,6 @@ let Rocket = function(startX, startY) {
     this.update = function() {
         this.sprite.x += this.vx;
     }
-
-
 }
 // Player's ship
 let Player = function(spriteId) {
@@ -248,8 +321,8 @@ let Enemy = function(spriteId) {
     this.introDone = false;
 
     this.movementTimer = new GameTimer(() => {
-        this.vx = getRandomNum(-3, 3);
-        this.vy = getRandomNum(-3, 3);
+        this.vx = getRandomNum(-2, 2);
+        this.vy = getRandomNum(-2, 2);
     }, 2000, true)
 
     this.update = function() {
@@ -259,7 +332,7 @@ let Enemy = function(spriteId) {
         if (this.sprite.x <= app.renderer.width - this.sprite.width) {this.introDone = true};
 
         if (this.introDone) {
-            this.movementTimer.update()
+            this.movementTimer.update();
             containSprite(this.sprite);
         }
         
@@ -326,7 +399,6 @@ let NewGameSetup = function() {
     }, 2000, true)
 
     this.update = function() {
-        
         this.background.update();
         this.player.update();
         this.spawnEnemy.update();
@@ -339,7 +411,7 @@ let NewGameSetup = function() {
                 console.log("collided");
             }
         })
-        // rocketCollision 
+        // rocketCollision or remove rocket if out of screen
         gameState.gameObjects.enemies.forEach((enemy, i) => {
             gameState.gameObjects.rockets.forEach((rocket, j) => {
                 if (detectRectCollision(enemy.sprite, rocket.sprite)){
@@ -349,11 +421,15 @@ let NewGameSetup = function() {
                     gamePlayContainer.removeChild(enemy.sprite);
                     gamePlayContainer.removeChild(rocket.sprite);
                 }
+                if (rocket.sprite.x > app.renderer.width) {
+                    console.log("rocket removed");
+                    gameState.gameObjects.rockets.splice(j, 1);
+
+                    gamePlayContainer.removeChild(rocket.sprite);
+                }
             })
         })
     }
-
-
 }
 
 function setup() {
@@ -366,17 +442,14 @@ function setup() {
     //alias for easier gametexture loader resource access
     let gameTextureId = PIXI.loader.resources.gameTextures.textures;    
 
+    gameState.menu = new GameMenu();
 
-    gameState.gameObj = new NewGameSetup();
+    gameContainer.visible = false;
+    gameState.gameInstance = new NewGameSetup();
+
     gameState.loop = gamePlayLoop;
-    app.ticker.add(delta => gameState.loop(delta));
-    console.log(gameState);
+    app.ticker.add(menuLoop);
 }
-
-function gameLoop() {
-    gameState();
-}
-
 
 let spawnEnemy = new GameTimer(()=> {
     let enemy = new Enemy("green_enemy_ship.png");
@@ -385,8 +458,10 @@ let spawnEnemy = new GameTimer(()=> {
 
 }, 2000, true)
 
-function gamePlayLoop(delta) {
-    gameState.gameObj.update();
-
+function gamePlayLoop() {
+    gameState.gameInstance.update();
+}
+function menuLoop() {
+    gameState.menu.update();
 }
 
