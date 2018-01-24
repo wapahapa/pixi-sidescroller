@@ -14,6 +14,7 @@ import splashURI from './assets/img/rocket_space_splash.png';
 import bg_menuURI from './assets/img/menu_bg.jpg';
 import menuLogoURI from './assets/img/game_logo.png';
 import menuAnimPlanetURI from './assets/img/menu_anim_planet.png';
+import menuFlareURI from './assets/img/menu_flare_big.png';
 
 //game container img imports
 import bg_farURI from './assets/img/back_bg.jpg';
@@ -31,25 +32,7 @@ let gameTexturesURI = `data:application/json;base64,${btoa(JSON.stringify(gameTe
 
 
 
-// fades container in or out then fires callback on end
-// function(PIXI.Container, callback on Fade end, true=fadeIn false=fadeOut, 0 < alphaModifier < 1)
-const containerFade = function(container, callback, fadeIn, alphaModifier)  {
-    let alphaMod;
-    fadeIn === true ? alphaMod = alphaModifier : alphaMod = -alphaModifier;
 
-    let fadeAnim = function() {
-        //let frameCall = requestAnimationFrame(fadeAnim) non pixi way
-        if (container.alpha < 0 || container.alpha > 1) {
-            callback();
-            app.ticker.remove(fadeAnim);
-            //cancelAnimationFrame(frameCall);                               
-        }
-        else {
-            container.alpha += alphaMod;
-        }
-    }
-    app.ticker.add(fadeAnim);
-}
 
 
 let app = new PIXI.Application({
@@ -65,13 +48,13 @@ PIXI.loader
     .add("menuBg", bg_menuURI)
     .add("menuPlanet", menuAnimPlanetURI)
     .add("menuLogo", menuLogoURI)
+    .add("menuFlare", menuFlareURI)
     .add("gameTextures", gameTexturesURI)
     .add("starsBg", bg_farURI)
     .add("moonBg", bg_closeURI)
     .load(setup);
 
-let splashContainer = new PIXI.Container();
-let splashScreen;
+
 
 // global gamestate Object
 let gameState = {
@@ -90,7 +73,6 @@ let gameState = {
 // global eventlisteners for keyboard keypresses
 window.addEventListener("keydown", (e) => {
     gameState.keys[e.code] = true;
-    //console.log(e.code);
 });
 window.addEventListener("keyup", (e) => {
     gameState.keys[e.code] = false;
@@ -98,6 +80,9 @@ window.addEventListener("keyup", (e) => {
 
 
 // PIXI app stage's hierarchy
+let splashContainer = new PIXI.Container();
+app.stage.addChild(splashContainer);
+
 let menuContainer = new PIXI.Container();
 app.stage.addChild(menuContainer);
 let menuBackgroundContainer = new PIXI.Container();
@@ -152,6 +137,25 @@ const detectRectCollision = (rectA, rectB) => {
     }
 
 };
+// fades container in or out then fires callback on end
+// function(PIXI.Container, callback on Fade end,  0 < alphaModifier < 1)
+const containerFade = function(container, callback, fadeIn, alphaModifier)  {
+    let alphaMod;
+    fadeIn === true ? alphaMod = alphaModifier : alphaMod = -alphaModifier;
+
+    let fadeAnim = function() {
+        //let frameCall = requestAnimationFrame(fadeAnim) non pixi way
+        if (container.alpha < 0 || container.alpha > 1) {
+            callback();
+            app.ticker.remove(fadeAnim);
+            //cancelAnimationFrame(frameCall);                               
+        }
+        else {
+            container.alpha += alphaMod;
+        }
+    }
+    app.ticker.add(fadeAnim);
+}
 
 
 // timer based on app's ticker elapsed time
@@ -178,7 +182,7 @@ let GameTimer = function(callback, interval, repeat) {
     }
 }
 
-
+// draw a customizable Button with the help of PIXI
 let GameMenuButton = function(x, y, width, height, text, onMouseUp) {
     this.btn = new PIXI.Container();
     this.btn.x = x;
@@ -211,29 +215,53 @@ let GameMenuButton = function(x, y, width, height, text, onMouseUp) {
 }
 let GameMenu = function() {
     this.menuBg = new PIXI.Sprite(PIXI.loader.resources.menuBg.texture);
+    this.menuFlare = new PIXI.Sprite(PIXI.loader.resources.menuFlare.texture);
+    this.menuFlare.anchor.set(0.5, 0.5);
+    this.menuFlare.x = 400;
+    this.menuFlare.y = 350;
+
+
     this.menuPlanet = new PIXI.Sprite(PIXI.loader.resources.menuPlanet.texture);
     this.menuPlanet.anchor.set(0.5, 0.5);
+
 
     this.planetScale = 0.4;
     this.planetSizeModifier = 0.0005;    
     
-    menuBackgroundContainer.addChild(this.menuBg, this.menuPlanet);
+    menuBackgroundContainer.addChild(this.menuBg, this.menuFlare, this.menuPlanet);
 
     this.menuBtnOffset = 25;
     this.menuLogo = new PIXI.Sprite(PIXI.loader.resources.menuLogo.texture);
+    this.menuLogo.x = this.menuBtnOffset;
     this.menuLogo.width = 150;
     this.menuLogo.height = 100;
-    this.game1 = new GameMenuButton(10, this.menuBtnOffset * 1, 150, 40, "GAME1", ()=> {console.log("cliked me")});
-    this.game2 = new GameMenuButton(10, this.menuBtnOffset * 2, 150, 40, "GAME2", () => console.log("hello"));
-    this.game3 = new GameMenuButton(10, this.menuBtnOffset * 3, 150, 40, "GAME3", function() { console.log("hello")});
-    this.exit = new GameMenuButton(10, this.menuBtnOffset * 4, 150, 40, "EXIT", () => {window.location.replace("http://www.google.hu")});
+
+    // switches scene to maingame
+    this.switchToGame = () => {
+        menuContainer.visible = false;
+        gameState.gameInstance = new NewGame();
+        gameContainer.visible = true;
+        gameContainer.alpha = 0;
+
+        containerFade(gameContainer, () => {
+            gameState.loop = gamePlayLoop;
+        }, true, 0.015)
+    }
+
+    // switches to game Scene
+    this.game1 = new GameMenuButton(10, this.menuBtnOffset * 2, 150, 40, "GAME1", this.switchToGame);
+    this.game2 = new GameMenuButton(10, this.menuBtnOffset * 3, 150, 40, "GAME2", this.switchToGame);
+    this.game3 = new GameMenuButton(10, this.menuBtnOffset * 4, 150, 40, "GAME3", this.switchToGame);
+
+    //navigates browser to specified url
+    this.exit = new GameMenuButton(10, this.menuBtnOffset * 5, 150, 40, "EXIT", () => {window.location.replace("http://www.google.hu")});
 
     menuUIContainer.addChild(this.menuLogo, this.game1.btn, this.game2.btn, this.game3.btn, this.exit.btn);
-    menuUIContainer.x = 25;
-    menuUIContainer.y = 80;
+    menuUIContainer.x = 50;
+    menuUIContainer.y = 120;
 
 
-    // very basic planet pulsing animation to fulfil menu bacground animation specification
+    // very basic planet pulsing and flare rotation animation to fulfil menu bacground animation specification
     this.planetAnimTimer = new GameTimer(() => {
         this.planetSizeModifier = -this.planetSizeModifier;
     }, 5000, true)
@@ -241,6 +269,8 @@ let GameMenu = function() {
         this.planetScale += this.planetSizeModifier;
         this.menuPlanet.setTransform(550, 300, this.planetScale, this.planetScale);
         this.planetAnimTimer.update();
+
+        this.menuFlare.rotation += 0.001;
     }
 
 }
@@ -306,7 +336,7 @@ let Enemy = function(spriteId) {
     this.sprite = new PIXI.Sprite(PIXI.loader.resources.gameTextures.textures[spriteId]);
 
     // spawn on right end of screen with random y value
-    this.sprite.x = app.renderer.width + 1;
+    this.sprite.x = app.renderer.width;
     this.sprite.y = getRandomIntInclusive(0, app.renderer.width - this.sprite.height);
     this.sprite.tint = 0xFF0000;
 
@@ -384,7 +414,7 @@ let GameBackground = function(bgEndId, bgFarId, bgCloseId, bgFront, scrollSpeed)
 
 
 }
-let NewGameSetup = function() {
+let NewGame = function() {
     this.background = new GameBackground("starsBg", "planet_black.png", "planet_green.png", "moonBg", 10);
     
     this.player = new Player("blue_ship.png");
@@ -398,17 +428,54 @@ let NewGameSetup = function() {
         gamePlayContainer.addChild(enemy.sprite);    
     }, 2000, true)
 
+    
+    this.gameOver = false;
+    // game over handler, waits for a set amount of time then cleans up the gamestate and game's containers
+    // switches scene back to the menu
+    this.gameOverTimer = new GameTimer(()=> {
+        containerFade(gameContainer, () => {
+            
+            gameState.gameObjects.rockets = [];
+            gameState.gameObjects.enemies = [];
+
+            gameContainer.visible = false;
+            menuContainer.visible = true;
+
+            gameState.gameInstance = null;
+            gameState.loop = menuLoop;
+            // cleanup any rendered sprite
+            for (let i = gamePlayContainer.children.length; i >= 0; i--) {
+                gamePlayContainer.removeChild(gamePlayContainer.children[i])
+            }
+            // cleanup background sprites, if this was skipped, whenever player starts a new game
+            // remnants of last game's background were visible for the duration of the fade animation.
+            for (let j = gameBackgroundContainer.children.length; j >= 0; j--) {
+                gameBackgroundContainer.removeChild(gameBackgroundContainer.children[j])
+            }
+            console.log(gamePlayContainer.children);
+            console.log(gameBackgroundContainer.children);
+
+            }, false, 0.005)
+    }, 3000, false)
+
     this.update = function() {
+
+        // update scrolling background and every gameobject
         this.background.update();
-        this.player.update();
         this.spawnEnemy.update();
         gameState.gameObjects.enemies.forEach(sprite => sprite.update());
         gameState.gameObjects.rockets.forEach(sprite => sprite.update());
 
+        // only update Player object is game isnt over yet
+        if (!this.gameOver) {this.player.update()} 
+
         // playerCollision
-        gameState.gameObjects.enemies.forEach(enemy => {
+        gameState.gameObjects.enemies.forEach((enemy, i) => {
             if (detectRectCollision(this.player.sprite, enemy.sprite)) {
-                console.log("collided");
+                this.gameOver = true;
+                gamePlayContainer.removeChild(this.player.sprite);
+                gameState.gameObjects.enemies.splice(i, 1);
+                gamePlayContainer.removeChild(enemy.sprite);                
             }
         })
         // rocketCollision or remove rocket if out of screen
@@ -429,35 +496,35 @@ let NewGameSetup = function() {
                 }
             })
         })
+        if (this.gameOver) {
+            console.log("game endin")
+            this.gameOverTimer.update();
+        }
     }
 }
 
-function setup() {
-
-    splashScreen = new PIXI.Sprite(PIXI.loader.resources.splashRocket.texture);
-    splashContainer.alpha = 1;
+function setup() {    
+    let splashScreen = new PIXI.Sprite(PIXI.loader.resources.splashRocket.texture);
     splashContainer.addChild(splashScreen);
-    //containerFade(splashContainer, ()=>{}, false, 0.015);
 
-    //alias for easier gametexture loader resource access
-    let gameTextureId = PIXI.loader.resources.gameTextures.textures;    
+    // intro splashcreen shown for 2 sec then swith to menu scene
+    setTimeout(() => {
+        containerFade(splashContainer, () => {
+            splashContainer.visible = false;
+            gameState.menu = new GameMenu();
+            gameState.loop = menuLoop;
 
-    gameState.menu = new GameMenu();
-
-    gameContainer.visible = false;
-    gameState.gameInstance = new NewGameSetup();
-
-    gameState.loop = gamePlayLoop;
-    app.ticker.add(menuLoop);
+            app.ticker.add(gameLoop);
+        }, false, 0.5)
+    }, 1)
 }
 
-let spawnEnemy = new GameTimer(()=> {
-    let enemy = new Enemy("green_enemy_ship.png");
-    enemyArr.push(enemy);
-    gamePlayContainer.addChild(enemy.sprite);
+// main gameloop
+function gameLoop() {
+    gameState.loop()
+}
 
-}, 2000, true)
-
+//current scene's loop function
 function gamePlayLoop() {
     gameState.gameInstance.update();
 }
