@@ -1,1 +1,1 @@
-body{display:flex;align-items:center;justify-content:center}#app{border:1px dotted blue}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center}#app{border:3px solid #000;border-radius:5px}
